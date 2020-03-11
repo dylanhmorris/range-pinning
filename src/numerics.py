@@ -224,7 +224,9 @@ class RangePinningModel():
         self.psi_vec[int(self.n_xs/2), int(self.n_zs/2)] = self.carrying_capacity
         self.calc_P_o()
         
-    def update(self, niter, verbose=False, print_iter=100):
+    def update(self, niter,
+               verbose = False,
+               print_iter = 100):
         ## only calculate P_o once, as it is constant given
         ## the zs and parameters
         self.calc_P_o()
@@ -282,7 +284,8 @@ class RangePinningModel():
 
     
 ########
-# these parameters range pin with the larger sigma_m but not the smaller
+# these parameters range pin with the
+# larger sigma_m but not the smaller
 #########
 
 zmax_init = 10
