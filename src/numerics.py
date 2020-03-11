@@ -14,8 +14,8 @@ import seaborn as sns
 import warnings
 
 def P_m(z_1, z_2, sigma_m, all_zs):
-    norm_const = np.sum([np.exp(-((z_1 - z_j) ** 2) / (sigma_m ** 2))
-                         for z_j in all_zs])
+    norm_const = np.max([np.exp(-((z_1 - z_j) ** 2) / (sigma_m ** 2))
+                             for z_j in all_zs])
     return np.exp(-((z_1 - z_2) ** 2) / (sigma_m ** 2)) / norm_const
 
 def P_o(z, z_1, z_2, sigma_r):
@@ -70,8 +70,8 @@ class RangePinningModel():
                  xmax,
                  n_zs,
                  n_xs,
-                 clutch_size,
-                 carrying_capacity,
+                 f,
+                 d,
                  sigma_r,
                  sigma_m,
                  sigma_d,
@@ -83,8 +83,8 @@ class RangePinningModel():
         self.xmax = xmax
         self.n_zs = n_zs
         self.n_xs = n_xs
-        self.clutch_size = clutch_size
-        self.carrying_capacity = carrying_capacity        
+        self.f = f
+        self.d = d
         self.sigma_r = sigma_r    # trait sd (in recombination)
 
         self.sigma_m = sigma_m
@@ -101,14 +101,20 @@ class RangePinningModel():
 
         return None
 
+    def psi_bar(self):
+        """
+        total population at 
+        each spatial point x
+        """
+        return np.sum(self.psi_vec, axis = 1)
+        
 
-    ## normalize populations by fineness
-    ## of space
-    def normed_clutch_size(self):
-        return self.clutch_size / self.n_xs
-
-    def normed_carrying_capacity(self):
-        return self.carrying_capacity / self.n_xs    
+    def B(self):
+        """
+        net birth rate in space and time,
+        considering competition in space
+        """
+        return (self.f - self.d * self.psi_bar())[:, np.newaxis]
     
     def psi_tilde_vec(
             self,
@@ -149,18 +155,18 @@ class RangePinningModel():
 
         if verbose:
             print("mating probs given encounter: \n", prob_mate_given_encounter)
-            print("encounters: \n", n_encounters)
-            print("mating encounters: \n", n_mating_encounters)
-            print("phenotype given parents: \n", self.prob_phenotype_given_parents)
-            print("offspring by parent pair: \n", offspring_by_parent_pair)
+            print("total encounters: \n", np.sum(n_encounters))
+            print("total mating encounters: \n", np.sum(n_mating_encounters))
             print("integrated: \n", integrated)
             print("mating probs shape:", prob_mate_given_encounter.shape)
             print("mating encounters shape:", n_mating_encounters.shape)
             print("phenotype given parents shape:", self.prob_phenotype_given_parents.shape)
             print("offspring by parent pair shape:", offspring_by_parent_pair.shape)
             print("integrated shape: ", integrated.shape)
+            print("net birth rate in space in space and time: ", self.B())
+            print("max fitness_w: ", np.max(fitness_w(self.zs[np.newaxis, :], self.s, self.xs[:, np.newaxis], self.b)))
 
-        return (self.normed_clutch_size() *
+        return (self.B() *
                 fitness_w(self.zs[np.newaxis, :], self.s, self.xs[:, np.newaxis], self.b) *
                 integrated)
 
@@ -169,10 +175,10 @@ class RangePinningModel():
             verbose=False):
     
         psi_tilde = self.psi_tilde_vec(
-            verbose=verbose)
+            verbose = verbose)
 
         if verbose:
-            print(np.sum(psi_tilde))
+            print("psi_tilde total: ", np.sum(psi_tilde))
     
         x_vals = self.xs[np.newaxis, :]
         y_vals = self.xs[:, np.newaxis]
@@ -199,11 +205,6 @@ class RangePinningModel():
         else:
             vec = np.sum(integrand, axis=0)
 
-        total_pop_in_space = np.sum(vec, axis = 1)
-        pops_vec_shape = total_pop_in_space[:, np.newaxis] * np.ones_like(vec)
-        scaling_term = self.normed_carrying_capacity() / np.maximum(pops_vec_shape, 1e-6)
-        vec = vec * ((pops_vec_shape > self.carrying_capacity) * scaling_term +
-                     (pops_vec_shape <= self.carrying_capacity) * 1)
         return vec
 
     def reset(self):
@@ -221,7 +222,7 @@ class RangePinningModel():
 
         # initialize population at the center with individuals
         # of all phenotypes
-        self.psi_vec[int(self.n_xs/2), int(self.n_zs/2)] = self.carrying_capacity
+        self.psi_vec[int(self.n_xs/2), int(self.n_zs/2)] = 2
         self.calc_P_o()
         
     def update(self, niter,
@@ -277,7 +278,7 @@ class RangePinningModel():
         return np.sum(self.psi_vec)
 
     def _which_x(self, x):
-        return np.where(model.xs >= 5)[0][0]
+        return np.where(model.xs >= x)[0][0]
 
     def pop_at_xs(self, x_val):
         return self.psi_vec[self._which_x(x_val)]
@@ -293,12 +294,12 @@ xmax_init = 5
 n_zs_init = 50
 n_xs_init = 15
 
-clutch_size_init = 10000
-carrying_capacity_init = 100
+f = 1
+d = 0.001
 
 sigma_r_init = 0.1    # trait sd (in recombination)
-sigma_m_init = 15     # assortativity of mating sd
-s_init = 2            # strength of selection
+sigma_m_init = 30     # assortativity of mating sd
+s_init = 0            # strength of selection
 b_init = 1            # environmental trait optimum gradient steepness
 sigma_d_init = 0.25   # dispersal kernel sd
 ##########################################
@@ -308,8 +309,8 @@ model = RangePinningModel(
     xmax_init,
     n_zs_init,
     n_xs_init,
-    clutch_size_init,
-    carrying_capacity_init,
+    f,
+    d,
     sigma_r_init,
     sigma_m_init,
     sigma_d_init,
